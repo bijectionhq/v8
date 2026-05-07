@@ -304,7 +304,12 @@ class RedundantStoreAnalysis {
         if (needs_revisit) {
           Block* back_edge = block.LastPredecessor();
           DCHECK_GE(back_edge->index(), block_index);
-          processed = back_edge->index().id() + 1;
+          // We need a +2 to process the backedge at the next iteration:
+          //   - the `--processed` at the end of the loop will undo a +1.
+          //   - `block_index` is computed with `processed - 1`, which will undo
+          //     another +1.
+          static constexpr int kBackedgeAdjust = 2;
+          processed = back_edge->index().id() + kBackedgeAdjust;
         }
       }
     }
