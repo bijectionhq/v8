@@ -734,6 +734,11 @@ IS_TYPE_FUNCTION_DECL(AnyHole)
 IS_TYPE_FUNCTION_DECL(StrongDescriptorArray)
 #undef IS_TYPE_FUNCTION_DECL
 
+// Concurrent-safe ThinString check. Pairs with the release-store of the map in
+// String::MakeThin: if this acquire load observes the ThinString map, the
+// actual() field is already published and safe to read.
+V8_INLINE bool IsThinString(Tagged<HeapObject> obj, AcquireLoadTag);
+
 // Most calls to Is<Oddball> should go via the Tagged<Object> overloads, withst
 // an Isolate/LocalIsolate/ReadOnlyRoots parameter.
 #define IS_TYPE_FUNCTION_DECL(Type, ...)                                  \

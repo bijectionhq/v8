@@ -361,6 +361,10 @@ DEF_HEAP_OBJECT_PREDICATE(HeapObject, IsThinString) {
   return StringShape(Cast<String>(obj)->map()).IsThin();
 }
 
+bool IsThinString(Tagged<HeapObject> obj, AcquireLoadTag) {
+  return InstanceTypeChecker::IsThinString(obj->map(kAcquireLoad));
+}
+
 DEF_HEAP_OBJECT_PREDICATE(HeapObject, IsSlicedString) {
   if (!IsString(obj, cage_base)) return false;
   return StringShape(Cast<String>(obj)->map()).IsSliced();
