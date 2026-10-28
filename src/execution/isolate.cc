@@ -114,6 +114,7 @@
 #include "src/objects/source-text-module-inl.h"
 #include "src/objects/string-set-inl.h"
 #include "src/objects/visitors.h"
+#include "src/profiler/bounded-stack-sampler.h"
 #include "src/profiler/heap-profiler.h"
 #include "src/profiler/tracing-cpu-profiler.h"
 #include "src/regexp/regexp-stack.h"
@@ -4936,6 +4937,7 @@ void Isolate::PrintAndClearRegExpSubjectStrings() {
 
 void Isolate::Deinit() {
   TRACE_ISOLATE(deinit);
+  DisposeBoundedStackSamplerForIsolate(this);
 
 #ifdef V8_ENABLE_REGEXP_DIAGNOSTICS
   PrintAndClearRegExpSubjectStrings();

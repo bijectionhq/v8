@@ -31,6 +31,94 @@ using NativeObject = void*;
 using SnapshotObjectId = uint32_t;
 using ProfilerId = uint32_t;
 
+/**
+ * Bounded, periodic physical JavaScript stack sampling. This deliberately does
+ * not use CpuProfiler's name, source-position, inline-stack or tree storage.
+ *
+ * Each frame identifies its compiled physical function container, not an
+ * executing source position. Optimized inline frames, native stacks and Wasm
+ * are not captured. Timestamps are relative monotonic microseconds, not CPU
+ * durations. Scheduling jitter and undelivered/coalesced signals are unknown.
+ *
+ * Create, stop, inspect and dispose on the entered isolate's owning thread.
+ * Dispose before disposing the isolate. Stop/Dispose do not execute JavaScript
+ * and are valid after execution termination. There is one live collector per
+ * isolate and at most four in the process, including stopped collectors.
+ * Collection cooperatively stops after one second or 65,536 code creation
+ * events. The time limit is checked at rundown/code-event/timer boundaries;
+ * heap-iterator setup, safepoints and OS scheduling may exceed that interval.
+ * GC movement collisions stop collection with kRelocationConflict; retained
+ * samples keep their identities, and later execution is not attributed.
+ */
+class V8_EXPORT BoundedStackSampler {
+ public:
+  static constexpr uint32_t kMaxSamples = 256;
+  static constexpr uint32_t kMaxFrames = 32;
+  static constexpr uint32_t kMaxCodeEntries = 4096;
+  static constexpr uint32_t kMaxRundownObjects = 65536;
+  static constexpr uint32_t kMaxCodeEvents = 65536;
+  static constexpr int64_t kMaxCollectionDurationUs = 1000000;
+
+  struct Options {
+    uint32_t sampling_interval_us = 1000;
+    uint32_t max_samples = kMaxSamples;
+    uint32_t max_code_entries = kMaxCodeEntries;
+    uint32_t max_rundown_objects = kMaxRundownObjects;
+  };
+  struct Frame {
+    // -1/-1 is an unmapped physical frame. No addresses or names leave V8.
+    int32_t script_id = -1;
+    int32_t function_start_utf16 = -1;
+  };
+  enum Loss : uint32_t {
+    kSampleLimit = 1 << 0,
+    kCodeLimit = 1 << 1,
+    kRundownLimit = 1 << 2,
+    kDepthLimit = 1 << 3,
+    kUnmappedFrame = 1 << 4,
+    kInterruptedMapMutation = 1 << 5,
+    kStackUnavailable = 1 << 6,
+    kConcurrentCodeCreation = 1 << 7,
+    kRelocationConflict = 1 << 8,
+    kCodeEventLimit = 1 << 9,
+    kTimeLimit = 1 << 10,
+    kContextCollected = 1 << 11,
+  };
+  struct Sample {
+    int64_t offset_us = 0;
+    uint32_t frame_count = 0;
+    uint32_t loss = 0;
+    // Topmost physical frame first. Entries after frame_count are unused.
+    Frame frames[kMaxFrames];
+  };
+  struct Summary {
+    uint32_t sample_count = 0;
+    uint32_t loss = 0;
+    uint32_t non_js_observations = 0;
+    uint32_t other_context_observations = 0;
+    uint32_t map_mutation_observations = 0;
+    uint32_t unavailable_stack_observations = 0;
+    int64_t elapsed_us = 0;
+    int64_t collection_end_us = 0;
+  };
+
+  // Returns nullptr for invalid bounds, unavailable platform/thread support or
+  // collector capacity. Ordinary execution must continue without profiling.
+  // The fixed arena is allocated once. Weak code handles are bounded by
+  // max_code_entries; one timer thread has a fixed 256 KiB requested stack.
+  // Start does not enable source-position collection or force compilation.
+  static BoundedStackSampler* New(Isolate* isolate, Local<Context> context,
+                                  const Options& options);
+  void Stop();
+  // Inspect only after Stop. An invalid index returns false.
+  Summary GetSummary() const;
+  bool GetSample(uint32_t index, Sample* out) const;
+  void Dispose();
+
+ private:
+  BoundedStackSampler() = delete;
+};
+
 struct CpuProfileDeoptFrame {
   int script_id;
   size_t position;
